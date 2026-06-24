@@ -1,0 +1,6 @@
+{
+  "name": "MovieFinder",
+  "description": "Premium cinematic guide to locate where any movie or TV show is streaming in real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

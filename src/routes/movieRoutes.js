@@ -4,10 +4,19 @@ const router = express.Router();
 
 const {
     searchMovie,
+    getAdvisorResponse,
+    getTrendingMovies,
     getMovieDetails,
-    getMovieAvailability
+    getMovieAvailability,
+    getPlatformMovies,
+    getSimilarMovies
 } = require(
     "../controllers/movieController"
+);
+
+router.get(
+    "/trending",
+    getTrendingMovies
 );
 
 router.get(
@@ -15,9 +24,24 @@ router.get(
     searchMovie
 );
 
+router.post(
+    "/advisor",
+    getAdvisorResponse
+);
+
+router.get(
+    "/platform/:platform",
+    getPlatformMovies
+);
+
 router.get(
     "/movie/:id",
     getMovieDetails
+);
+
+router.get(
+    "/movie/:id/similar",
+    getSimilarMovies
 );
 
 router.get(
