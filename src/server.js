@@ -1,29 +1,91 @@
 require("dotenv").config();
 
 const express = require("express");
+const compression = require("compression");
+const cors = require("cors");
+const helmet = require("helmet");
+const hpp = require("hpp");
+const rateLimit = require("express-rate-limit");
 const movieRoutes = require("./routes/movieRoutes");
 
 const app = express();
 
-app.use((req, res, next) => {
-    res.setHeader("Access-Control-Allow-Origin", process.env.FRONTEND_ORIGIN || "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+const isProduction = process.env.NODE_ENV === "production";
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-    if (req.method === "OPTIONS") {
-        return res.sendStatus(204);
+app.disable("x-powered-by");
+app.set("trust proxy", Number(process.env.TRUST_PROXY || 1));
+
+app.use(helmet({
+    crossOriginResourcePolicy: {
+        policy: "cross-origin"
+    },
+    contentSecurityPolicy: false
+}));
+
+app.use(cors({
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin) || (!isProduction && allowedOrigins.length === 0)) {
+            return callback(null, true);
+        }
+
+        const error = new Error("Not allowed by CORS");
+        error.status = 403;
+        return callback(error);
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 86400
+}));
+
+app.use(compression());
+app.use(hpp());
+app.use(express.json({
+    limit: process.env.JSON_BODY_LIMIT || "100kb"
+}));
+
+app.use("/api", rateLimit({
+    windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+    limit: Number(process.env.RATE_LIMIT_MAX || 100),
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+        message: "Too many requests. Please try again later."
     }
+}));
 
-    next();
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        environment: process.env.NODE_ENV || "development",
+        uptime: process.uptime()
+    });
 });
 
-app.use(express.json());
-
 app.get("/", (req, res) => {
-    res.send("Movie Tracker API Running");
+    res.json({
+        message: "FindMyMovie API running",
+        health: "/health"
+    });
 });
 
 app.use("/api", movieRoutes);
+
+app.use((req, res) => {
+    res.status(404).json({
+        message: "Route not found"
+    });
+});
+
+app.use((error, req, res, next) => {
+    console.error(error);
+    res.status(error.status || 500).json({
+        message: isProduction ? "Internal server error" : error.message
+    });
+});
 
 const PORT = process.env.PORT || 3000;
 

@@ -389,20 +389,123 @@ GET /api/movie/157336/availability
 
 # 🔐 Environment Variables
 
-Create a `.env` file:
+Create backend `.env` from `.env.example`:
 
 ```env
+NODE_ENV=development
 PORT=3000
+FRONTEND_ORIGIN=http://localhost:5173
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
 
 TMDB_API_KEY=your_tmdb_api_key
-
 WATCHMODE_API_KEY=your_watchmode_api_key
 
 DB_HOST=localhost
+DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=find_my_movie
+DB_SSL=false
 ```
+
+Create frontend env from `Frontend/.env.example`:
+
+```env
+VITE_API_URL=http://localhost:3000
+```
+
+---
+
+# 🚀 Deployment
+
+## 1. Aiven for MySQL
+
+Create an Aiven MySQL service, then run the schema in `src/database/schema.sql` against your Aiven database.
+
+Use the Aiven connection values in Render:
+
+```env
+DB_HOST=your-aiven-host
+DB_PORT=your-aiven-port
+DB_USER=avnadmin
+DB_PASSWORD=your-aiven-password
+DB_NAME=defaultdb
+DB_SSL=true
+DB_SSL_CA=your-aiven-ca-certificate
+```
+
+If the CA certificate is stored as a file in Render, use `DB_SSL_CA_PATH` instead of `DB_SSL_CA`.
+
+## 2. Render Backend
+
+This repo includes `Dockerfile`, `.dockerignore`, and `render.yaml`.
+
+In Render, create a Blueprint or a Docker Web Service from this repository. Set the service root to the repository root and keep the Dockerfile path as `./Dockerfile`.
+
+Required Render environment variables:
+
+```env
+NODE_ENV=production
+FRONTEND_ORIGIN=https://your-netlify-site.netlify.app
+TMDB_API_KEY=your_tmdb_api_key
+WATCHMODE_API_KEY=your_watchmode_api_key
+DB_HOST=your-aiven-host
+DB_PORT=your-aiven-port
+DB_USER=avnadmin
+DB_PASSWORD=your-aiven-password
+DB_NAME=defaultdb
+DB_SSL=true
+DB_SSL_CA=your-aiven-ca-certificate
+```
+
+Optional AI advisor variables:
+
+```env
+GEMINI_API_KEY=your_gemini_key
+OPENAI_API_KEY=your_openai_key
+```
+
+Health check endpoint:
+
+```http
+GET /health
+```
+
+## 3. Netlify Frontend
+
+This repo includes `netlify.toml` for the `Frontend` Vite app.
+
+Netlify settings:
+
+```text
+Base directory: Frontend
+Build command: npm run build
+Publish directory: Frontend/dist
+```
+
+Set this Netlify environment variable:
+
+```env
+VITE_API_URL=https://your-render-service.onrender.com
+```
+
+After Netlify gives you the site URL, update Render `FRONTEND_ORIGIN` to that exact URL.
+
+---
+
+# 🛡️ Production Security Added
+
+* Rate limiting on `/api`
+* Helmet HTTP security headers
+* Strict configurable CORS
+* Hidden `X-Powered-By`
+* JSON body size limit
+* Query parameter pollution protection
+* Compression
+* Netlify static security headers
+* Render health check endpoint
+* Managed MySQL SSL support for Aiven
 
 ---
 
