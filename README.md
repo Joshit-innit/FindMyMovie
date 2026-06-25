@@ -1,395 +1,190 @@
-# 🎬 FindMyMovie
+# FindMyMovie
 
-> A movie discovery platform that helps users instantly find where a movie is available to stream, rent, or buy.
+FindMyMovie is a full-stack movie discovery app that helps users quickly find where a movie is available to stream, rent, or buy. It combines a polished React frontend, an Express API, live movie/provider data, an AI search assistant, and a MySQL-compatible cache layer.
 
----
+> "I find it hard finding where movies exists, if i google it and open the movie it shows not available or rent this irritated me quite a bit"
 
-## 📖 About The Project
+That frustration is the reason this project exists. Instead of jumping between Google results, Netflix, Prime Video, Disney+, Apple TV+, and other catalogs, FindMyMovie gives users one place to search, compare, filter, and discover where a title can actually be watched.
 
-Finding a movie online can be frustrating.
+## Live Product Preview
 
-Most search engines show streaming platforms where a movie is supposedly available, but when users open those platforms they often find:
+### Home and AI Advisor
 
-* The movie is unavailable in their region
-* The movie is only available for rent
-* The information is outdated
-* Users have to visit multiple platforms before finding the movie
+![FindMyMovie home with AI advisor](docs/images/home-advisor.png)
 
-**FindMyMovie** solves this problem by providing a single API that allows users to:
+### Trending Titles and Platform Shortcuts
 
-* Search for movies
-* View movie details
-* Check streaming availability
-* Know whether the movie is available via subscription, rent, or purchase
+![Trending movies and popular streaming platforms](docs/images/trending-platforms.png)
 
----
+### Movie Search
 
-## 🎯 Problem Statement
+![Movie search result for Hi Nanna](docs/images/movie-search.png)
 
-Users waste time searching across multiple streaming platforms to find where a movie is actually available.
+### Platform Catalogs
 
-FindMyMovie simplifies the process by aggregating movie information and streaming availability into a single platform.
+![Streaming platform catalog cards](docs/images/platforms.png)
 
----
+### Empty State and Filters
 
-# 🏗️ Tech Stack
+![Empty state when no filtered movies match](docs/images/empty-state.png)
 
-| Category               | Technology    |
-| ---------------------- | ------------- |
-| Backend                | Node.js       |
-| Framework              | Express.js    |
-| Database               | MySQL         |
-| Movie Data             | TMDB API      |
+## What It Does
+
+FindMyMovie lets users:
+
+- Search movies by title, genre, director, cast, or rough spelling.
+- Browse trending movies.
+- Filter by streaming platforms such as Netflix, Disney+, Prime Video, Apple TV+, HBO Max, MUBI, and Criterion.
+- View movie metadata including poster, rating, release year, description, runtime, cast, director, and language.
+- Check availability through live provider data.
+- Ask an AI advisor for natural-language movie recommendations.
+- Cache selected movie and availability data to reduce repeated external API calls.
+
+## Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite |
+| Styling | Tailwind CSS, custom dark UI system |
+| UI Icons and Motion | Lucide React, Motion |
+| Backend | Node.js, Express.js |
+| Database | MySQL-compatible database, TiDB Cloud |
+| Database Driver | `mysql2/promise` |
+| External Movie Data | TMDB API |
 | Streaming Availability | Watchmode API |
-| Environment Management | dotenv        |
+| AI Advisor | Gemini API and OpenAI API fallback |
+| HTTP Client | Axios |
+| Security | Helmet, CORS allowlist, Express Rate Limit, HPP, JSON body limits |
+| Deployment | Netlify frontend, Render Docker backend, TiDB Cloud database |
+| Containerization | Docker |
+| Environment Config | dotenv, Vite environment variables |
 
----
+## System Design
 
-# 📂 Project Structure
+FindMyMovie is split into three main parts:
+
+- A Vite React frontend hosted on Netlify.
+- A Dockerized Express API hosted on Render.
+- A TiDB Cloud database used as a MySQL-compatible cache.
+
+```mermaid
+flowchart LR
+    User["User Browser"] --> Netlify["Netlify\nReact + Vite Frontend"]
+    Netlify --> API["Render\nDockerized Express API"]
+    API --> Security["Security Middleware\nCORS, Helmet, Rate Limits"]
+    Security --> Routes["Movie Routes"]
+    Routes --> Controllers["Controllers"]
+    Controllers --> Services["Service Layer"]
+    Services --> TiDB["TiDB Cloud\nMySQL-compatible Cache"]
+    Services --> TMDB["TMDB API\nMovie Metadata"]
+    Services --> Watchmode["Watchmode API\nStreaming Availability"]
+    Services --> AI["Gemini / OpenAI\nAIDA Advisor"]
+```
+
+## Request Flow
+
+When a user searches for a movie, the frontend calls the backend API. The backend normalizes the query, optionally asks the AI advisor for spelling corrections or title variants, fetches matching movies from TMDB, and returns normalized results to the UI.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as React Frontend
+    participant A as Express API
+    participant AI as AI Advisor
+    participant T as TMDB
+
+    U->>F: Search "hi nanna"
+    F->>A: GET /api/search?q=hi%20nanna
+    A->>AI: Generate likely title variants
+    AI-->>A: Search queries
+    A->>T: Search movie catalog
+    T-->>A: Movie results
+    A-->>F: Normalized movie list
+    F-->>U: Render movie cards
+```
+
+## Movie Details and Cache Flow
+
+The backend stores movie details and availability results in TiDB. This keeps repeated lookups faster and reduces unnecessary calls to external APIs.
+
+```mermaid
+flowchart TD
+    Start["User opens movie details"] --> API["GET /api/movie/:id"]
+    API --> TMDB["Fetch full movie details from TMDB"]
+    TMDB --> Providers["Fetch providers from TMDB watch providers"]
+    Providers --> SaveMovie["Save movie metadata to TiDB"]
+    SaveMovie --> Response["Return movie details to frontend"]
+
+    Availability["GET /api/movie/:id/availability"] --> CheckCache{"Availability in TiDB?"}
+    CheckCache -- Yes --> ReturnCached["Return cached availability"]
+    CheckCache -- No --> Watchmode["Fetch availability from Watchmode"]
+    Watchmode --> SaveAvailability["Save availability to TiDB"]
+    SaveAvailability --> ReturnFresh["Return fresh availability"]
+```
+
+## Backend Architecture
+
+```mermaid
+flowchart TB
+    Server["src/server.js\nExpress App"] --> Middleware["Security Middleware"]
+    Middleware --> MovieRoutes["src/routes/movieRoutes.js"]
+    MovieRoutes --> Controller["src/controllers/movieController.js"]
+    Controller --> TMDBService["src/services/tmdbService.js"]
+    Controller --> WatchmodeService["src/services/watchmodeService.js"]
+    Controller --> AdvisorService["src/services/advisorService.js"]
+    Controller --> MovieDbService["src/services/movieDbService.js"]
+    MovieDbService --> DbPool["src/database/db.js"]
+    DbPool --> Database["TiDB / MySQL"]
+```
+
+## API Endpoints
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Render health check |
+| `GET` | `/api/trending` | Get trending movies |
+| `GET` | `/api/search?q=movie` | Search movies |
+| `POST` | `/api/advisor` | Ask the AI movie advisor |
+| `GET` | `/api/platform/:platform` | Browse movies by provider |
+| `GET` | `/api/movie/:id` | Get movie details |
+| `GET` | `/api/movie/:id/similar` | Get similar movies |
+| `GET` | `/api/movie/:id/availability` | Get streaming availability |
+
+## Project Structure
 
 ```text
 FindMyMovie/
-│
-├── .env
-├── package.json
-│
+├── Frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   ├── services/
+│   │   ├── types/
+│   │   └── App.tsx
+│   ├── package.json
+│   └── vite.config.ts
 ├── src/
-│
-│   ├── server.js
-│   │
-│   ├── routes/
-│   │   └── movieRoutes.js
-│   │
 │   ├── controllers/
-│   │   └── movieController.js
-│   │
-│   ├── services/
-│   │   ├── tmdbService.js
-│   │   ├── watchmodeService.js
-│   │   └── movieDbService.js
-│   │
 │   ├── database/
-│   │   └── db.js
-│   │
-│   └── config/
-│
-└── tests/
+│   │   ├── db.js
+│   │   └── schema.sql
+│   ├── routes/
+│   ├── services/
+│   └── server.js
+├── docs/
+│   └── images/
+├── Dockerfile
+├── render.yaml
+├── netlify.toml
+├── package.json
+└── README.md
 ```
 
----
+## Local Development
 
-# ⚙️ Backend Architecture
+### Backend
 
-```text
-Client
-  │
-  ▼
-Routes
-  │
-  ▼
-Controllers
-  │
-  ▼
-Services
-  │
-  ├── MySQL Cache
-  ├── TMDB API
-  └── Watchmode API
-```
-
----
-
-# 🔄 Request Processing Flow
-
-## Movie Search Flow
-
-```text
-User
-  │
-  ▼
-/api/search?q=movie
-  │
-  ▼
-TMDB API
-  │
-  ▼
-Search Results
-```
-
----
-
-## Movie Details Flow
-
-```text
-User
-  │
-  ▼
-/api/movie/:id
-  │
-  ▼
-Check MySQL
-  │
-  ▼
-Movie Found?
-  │
-  ├── Yes
-  │      │
-  │      ▼
-  │   Return Data
-  │
-  └── No
-         │
-         ▼
-      TMDB API
-         │
-         ▼
-      Save To MySQL
-         │
-         ▼
-      Return Data
-```
-
----
-
-## Movie Availability Flow
-
-```text
-User
-  │
-  ▼
-/api/movie/:id/availability
-  │
-  ▼
-Check MySQL
-  │
-  ▼
-Availability Found?
-  │
-  ├── Yes
-  │      │
-  │      ▼
-  │   Return Data
-  │
-  └── No
-         │
-         ▼
-      Watchmode API
-         │
-         ▼
-      Save To MySQL
-         │
-         ▼
-      Return Data
-```
-
----
-
-# 👤 User Journey
-
-```text
-User Searches Movie
-          │
-          ▼
-     Search Results
-          │
-          ▼
-      Select Movie
-          │
-          ▼
-    View Movie Details
-          │
-          ▼
- View Streaming Platforms
-          │
-          ▼
- Subscription / Rent / Buy
-          │
-          ▼
-      Watch Movie
-```
-
----
-
-# 🗄️ Database Design
-
-## Movies Table
-
-| Column       | Type         | Description         |
-| ------------ | ------------ | ------------------- |
-| movie_id     | BIGINT       | TMDB Movie ID       |
-| title        | VARCHAR(255) | Movie Title         |
-| rating       | DECIMAL(3,1) | Movie Rating        |
-| runtime      | INT          | Duration in Minutes |
-| poster       | TEXT         | Poster Path         |
-| genres       | JSON         | Movie Genres        |
-| last_updated | TIMESTAMP    | Last Update Time    |
-
----
-
-## Availability Table
-
-| Column            | Type          | Description               |
-| ----------------- | ------------- | ------------------------- |
-| id                | INT           | Primary Key               |
-| movie_id          | BIGINT        | TMDB Movie ID             |
-| platform_name     | VARCHAR(100)  | Streaming Platform        |
-| availability_type | VARCHAR(20)   | Subscription / Rent / Buy |
-| region            | VARCHAR(10)   | Country Code              |
-| price             | DECIMAL(10,2) | Rental or Purchase Price  |
-| last_updated      | TIMESTAMP     | Last Update Time          |
-
----
-
-# 📡 API Documentation
-
-## 1. Search Movies
-
-### Endpoint
-
-```http
-GET /api/search?q={movie_name}
-```
-
-### Example
-
-```http
-GET /api/search?q=interstellar
-```
-
-### Response
-
-| Field        | Type   | Description   |
-| ------------ | ------ | ------------- |
-| id           | Number | TMDB Movie ID |
-| title        | String | Movie Title   |
-| release_date | String | Release Date  |
-| rating       | Number | TMDB Rating   |
-
-### Sample Response
-
-```json
-[
-  {
-    "id": 157336,
-    "title": "Interstellar",
-    "release_date": "2014-11-05",
-    "rating": 8.4
-  }
-]
-```
-
----
-
-## 2. Get Movie Details
-
-### Endpoint
-
-```http
-GET /api/movie/:id
-```
-
-### Example
-
-```http
-GET /api/movie/157336
-```
-
-### Response
-
-| Field   | Type   | Description        |
-| ------- | ------ | ------------------ |
-| id      | Number | Movie ID           |
-| title   | String | Movie Title        |
-| runtime | Number | Runtime in Minutes |
-| rating  | Number | TMDB Rating        |
-| poster  | String | Poster Path        |
-| genres  | Array  | Movie Genres       |
-
-### Sample Response
-
-```json
-{
-  "id": 157336,
-  "title": "Interstellar",
-  "runtime": 169,
-  "rating": 8.4,
-  "poster": "/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg",
-  "genres": [
-    "Adventure",
-    "Science Fiction"
-  ]
-}
-```
-
----
-
-## 3. Get Movie Availability
-
-### Endpoint
-
-```http
-GET /api/movie/:id/availability
-```
-
-### Example
-
-```http
-GET /api/movie/157336/availability
-```
-
-### Response
-
-| Field             | Type   | Description           |
-| ----------------- | ------ | --------------------- |
-| platform_name     | String | Streaming Platform    |
-| availability_type | String | sub / rent / buy      |
-| region            | String | Country Code          |
-| price             | Number | Rental/Purchase Price |
-
-### Sample Response
-
-```json
-[
-  {
-    "platform_name": "Netflix",
-    "availability_type": "sub",
-    "region": "US",
-    "price": null
-  },
-  {
-    "platform_name": "Apple TV",
-    "availability_type": "rent",
-    "region": "US",
-    "price": 3.99
-  }
-]
-```
-
----
-
-# 🚀 Key Features
-
-✅ Movie Search
-
-✅ Movie Details
-
-✅ Streaming Availability Tracking
-
-✅ Subscription / Rent / Buy Information
-
-✅ MySQL Caching Layer
-
-✅ Reduced External API Usage
-
-✅ Fast Response Times
-
-✅ RESTful API Architecture
-
----
-
-# 🔐 Environment Variables
-
-Create backend `.env` from `.env.example`:
+Create a backend `.env` file from `.env.example`:
 
 ```env
 NODE_ENV=development
@@ -398,85 +193,134 @@ FRONTEND_ORIGIN=http://localhost:5173
 RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX=100
 
-TMDB_API_KEY=your_tmdb_api_key
-WATCHMODE_API_KEY=your_watchmode_api_key
-
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=find_my_movie
 DB_SSL=false
+
+TMDB_API_KEY=your_tmdb_api_key
+WATCHMODE_API_KEY=your_watchmode_api_key
+GEMINI_API_KEY=your_gemini_api_key
+OPENAI_API_KEY=your_openai_api_key
 ```
 
-Create frontend env from `Frontend/.env.example`:
+Install and run the backend:
+
+```bash
+npm install
+npm run dev
+```
+
+The API runs at:
+
+```text
+http://localhost:3000
+```
+
+### Frontend
+
+Create `Frontend/.env`:
 
 ```env
 VITE_API_URL=http://localhost:3000
 ```
 
----
+Install and run the frontend:
 
-# 🚀 Deployment
-
-## 1. Aiven for MySQL
-
-Create an Aiven MySQL service, then run the schema in `src/database/schema.sql` against your Aiven database.
-
-Use the Aiven connection values in Render:
-
-```env
-DB_HOST=your-aiven-host
-DB_PORT=your-aiven-port
-DB_USER=avnadmin
-DB_PASSWORD=your-aiven-password
-DB_NAME=defaultdb
-DB_SSL=true
-DB_SSL_CA=your-aiven-ca-certificate
+```bash
+cd Frontend
+npm install
+npm run dev
 ```
 
-If the CA certificate is stored as a file in Render, use `DB_SSL_CA_PATH` instead of `DB_SSL_CA`.
+The app runs at:
 
-## 2. Render Backend
+```text
+http://localhost:5173
+```
 
-This repo includes `Dockerfile`, `.dockerignore`, and `render.yaml`.
+## Database Setup
 
-In Render, create a Blueprint or a Docker Web Service from this repository. Set the service root to the repository root and keep the Dockerfile path as `./Dockerfile`.
+Run this schema in TiDB Cloud or any MySQL-compatible database:
 
-Required Render environment variables:
+```sql
+CREATE TABLE IF NOT EXISTS movies (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    movie_id BIGINT NOT NULL,
+    title VARCHAR(255),
+    rating DECIMAL(4, 2),
+    runtime INT,
+    poster TEXT,
+    genres TEXT,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY movies_movie_id_unique (movie_id)
+);
+
+CREATE TABLE IF NOT EXISTS availability (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    movie_id BIGINT NOT NULL,
+    platform_name VARCHAR(100),
+    availability_type VARCHAR(30),
+    region VARCHAR(10),
+    price DECIMAL(10, 2),
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY availability_movie_id_index (movie_id)
+);
+```
+
+The same SQL is available in `src/database/schema.sql`.
+
+## Deployment
+
+The production setup uses:
+
+```text
+Netlify -> Frontend
+Render -> Backend API
+TiDB Cloud -> MySQL-compatible database
+```
+
+### Render Backend
+
+Render uses the included `Dockerfile`.
+
+Required environment variables:
 
 ```env
 NODE_ENV=production
+TRUST_PROXY=1
 FRONTEND_ORIGIN=https://your-netlify-site.netlify.app
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+
+DB_HOST=your-tidb-host
+DB_PORT=4000
+DB_USER=your-tidb-user
+DB_PASSWORD=your-tidb-password
+DB_NAME=your-database-name
+DB_SSL=true
+
 TMDB_API_KEY=your_tmdb_api_key
 WATCHMODE_API_KEY=your_watchmode_api_key
-DB_HOST=your-aiven-host
-DB_PORT=your-aiven-port
-DB_USER=avnadmin
-DB_PASSWORD=your-aiven-password
-DB_NAME=defaultdb
-DB_SSL=true
-DB_SSL_CA=your-aiven-ca-certificate
+GEMINI_API_KEY=your_gemini_api_key
+OPENAI_API_KEY=your_openai_api_key
 ```
 
-Optional AI advisor variables:
+Health check:
 
-```env
-GEMINI_API_KEY=your_gemini_key
-OPENAI_API_KEY=your_openai_key
+```text
+/health
 ```
 
-Health check endpoint:
+### Netlify Frontend
 
-```http
-GET /health
-```
+The included `netlify.toml` points Netlify at the Vite app inside `Frontend`.
 
-## 3. Netlify Frontend
-
-This repo includes `netlify.toml` for the `Frontend` Vite app.
-
-Netlify settings:
+Build settings:
 
 ```text
 Base directory: Frontend
@@ -484,46 +328,42 @@ Build command: npm run build
 Publish directory: Frontend/dist
 ```
 
-Set this Netlify environment variable:
+Required Netlify environment variable:
 
 ```env
 VITE_API_URL=https://your-render-service.onrender.com
 ```
 
-After Netlify gives you the site URL, update Render `FRONTEND_ORIGIN` to that exact URL.
+## Security Features
 
----
+The backend includes production-focused protections:
 
-# 🛡️ Production Security Added
+- Rate limiting on all `/api` routes.
+- Helmet security headers.
+- CORS allowlist through `FRONTEND_ORIGIN`.
+- Query parameter pollution protection.
+- JSON request body size limit.
+- Hidden `X-Powered-By` header.
+- Compression.
+- Render health check endpoint.
+- MySQL SSL support for managed cloud databases.
 
-* Rate limiting on `/api`
-* Helmet HTTP security headers
-* Strict configurable CORS
-* Hidden `X-Powered-By`
-* JSON body size limit
-* Query parameter pollution protection
-* Compression
-* Netlify static security headers
-* Render health check endpoint
-* Managed MySQL SSL support for Aiven
+## Why This Project Matters
 
----
+Movie search looks simple until the user reaches the last step: actually finding where to watch the movie. A title may appear in search results, but then the platform says it is unavailable, region-locked, rental-only, or missing entirely. FindMyMovie is built around that last-mile problem.
 
-# 🎯 Future Enhancements
+The goal is not just to show movie posters. The goal is to reduce the number of dead ends between "I want to watch this" and "here is where it is available."
 
-* Unified Movie Endpoint (`/api/movie/:id/full`)
-* Genre Filtering
-* Platform Filtering
-* Regional Availability Support
-* Frontend Dashboard (React)
-* Trending Movies
-* Personalized Recommendations
+## Future Improvements
 
----
+- User accounts and persistent watchlists.
+- Regional availability selector.
+- More provider integrations.
+- Smarter deduplication between TMDB and Watchmode results.
+- Personalized recommendation history.
+- Admin dashboard for API/cache monitoring.
+- Background refresh jobs for stale availability data.
 
-# 👨‍💻 Author
+## Author
 
-**Tammana Joshit**
-
-FindMyMovie was built to simplify movie discovery and streaming availability tracking using real-world API integrations, database caching, and scalable backend architecture.
-# FindMyMovie
+Built by **Tammana Joshit** as a full-stack streaming discovery platform using real API integrations, cloud deployment, database caching, and a production-minded security layer.

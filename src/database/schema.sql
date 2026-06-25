@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS movies (
     rating DECIMAL(4, 2),
     runtime INT,
     poster TEXT,
-    genres JSON,
-    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    genres TEXT,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY movies_movie_id_unique (movie_id)
 );
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS availability (
     availability_type VARCHAR(30),
     region VARCHAR(10),
     price DECIMAL(10, 2),
-    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY availability_movie_id_index (movie_id)
 );
